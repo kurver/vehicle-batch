@@ -90,11 +90,10 @@ public class ComplianceJobConfig {
 
     @Bean
     @StepScope
-    ItemProcessor<VehicleCompliance, ComplianceUpdate> complianceProcessor(
-            @Value("#{jobParameters['asOf']}") String asOf, Clock clock) {
+    ComplianceProcessor complianceProcessor(@Value("#{jobParameters['asOf']}") String asOf, Clock clock) {
         LocalDate day = resolve(asOf, clock);
         log.info("Reassessing vehicle compliance as of {}", day);
-        return compliance -> compliance.reassessedOn(day).orElse(null);
+        return new ComplianceProcessor(day);
     }
 
     @Bean
