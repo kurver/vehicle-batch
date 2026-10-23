@@ -30,6 +30,8 @@ class ComplianceJobTests {
             .withInitScripts("db/test-schema.sql", "db/postgres/vehicle_status_trigger.sql");
 
     private static final LocalDate TODAY = LocalDate.now();
+    private static final int ACTIVE = 1;
+    private static final int LAPSED = 5;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -47,11 +49,13 @@ class ComplianceJobTests {
 
     @Test
     void triggerKeepsStatusInStepWithVehicle() {
-        vehicle(1, TODAY.plusDays(5), null);
-        assertThat(status(1)).containsEntry("inspection_valid_fl", "Y").containsEntry("licence_valid_fl", "Y");
+        vehicle(1, TODAY.plusDays(5), null, 10, ACTIVE, TODAY.plusDays(5));
+        // flags: inspection, licence, a/b rego, lapsed, exempt
+        assertThat(flags(1)).containsExactly("Y", "Y", "Y", "N", "Y");
 
-        jdbc.update("UPDATE vehicle SET inspection_expiry_dt = ? WHERE vehicle_id = 1", TODAY.minusDays(1));
-        assertThat(status(1)).containsEntry("inspection_valid_fl", "N").containsEntry("licence_valid_fl", "Y");
+        jdbc.update("UPDATE vehicle SET inspection_expiry_dt = ?, regt_status_cd = ?, exempt_end_dt = ?, "
+                + "vehicle_usage_cd = 3 WHERE vehicle_id = 1", TODAY.minusDays(1), LAPSED, TODAY.minusDays(1));
+        assertThat(flags(1)).containsExactly("N", "Y", "N", "Y", "N");
 
         jdbc.update("DELETE FROM vehicle WHERE vehicle_id = 1");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM vehicle_status", Integer.class)).isZero();
@@ -60,23 +64,45 @@ class ComplianceJobTests {
     @Test
     void jobExpiresOnlyWhatHasPassedItsDate() throws Exception {
         LocalDate asOf = TODAY.plusDays(10);
-        vehicle(1, asOf.minusDays(1), null);          // inspection lapses
-        vehicle(2, asOf, asOf);                       // valid through the expiry date itself
-        vehicle(3, null, asOf.minusDays(3));          // licence lapses, no inspection date
+        vehicle(1, asOf.minusDays(1), null);              // inspection lapses
+        vehicle(2, asOf, asOf);                           // valid through the expiry date itself
+        vehicle(3, null, asOf.minusDays(3));              // licence lapses, no inspection date
         vehicle(4, asOf.minusDays(2), asOf.minusDays(2)); // both lapse
         vehicle(5, asOf.plusDays(30), asOf.plusDays(30)); // untouched
-        vehicle(6, TODAY.minusDays(1), null);         // already N from the trigger
+        vehicle(6, TODAY.minusDays(1), null);             // already N from the trigger
+        vehicle(7, null, null, 1, ACTIVE, asOf.minusDays(1)); // exemption ends
+        vehicle(8, null, null, 1, ACTIVE, asOf);              // exempt through the end date itself
 
-        JobExecution execution = jobLauncher.run(complianceJob,
-                new JobParametersBuilder().addString("asOf", asOf.toString()).toJobParameters());
+        JobExecution execution = run(asOf);
 
         assertThat(execution.getExitStatus().getExitCode()).isEqualTo("COMPLETED");
-        assertThat(flags(1)).containsExactly("N", "Y");
-        assertThat(flags(2)).containsExactly("Y", "Y");
-        assertThat(flags(3)).containsExactly("Y", "N");
-        assertThat(flags(4)).containsExactly("N", "N");
-        assertThat(flags(5)).containsExactly("Y", "Y");
-        assertThat(flags(6)).containsExactly("N", "Y");
+        assertThat(flags(1)).containsExactly("N", "Y", "N", "N", "N");
+        assertThat(flags(2)).containsExactly("Y", "Y", "N", "N", "N");
+        assertThat(flags(3)).containsExactly("Y", "N", "N", "N", "N");
+        assertThat(flags(4)).containsExactly("N", "N", "N", "N", "N");
+        assertThat(flags(5)).containsExactly("Y", "Y", "N", "N", "N");
+        assertThat(flags(6)).containsExactly("N", "Y", "N", "N", "N");
+        assertThat(flags(7)).containsExactly("Y", "Y", "N", "N", "N");
+        assertThat(flags(8)).containsExactly("Y", "Y", "N", "N", "Y");
+    }
+
+    @Test
+    void jobCorrectsFlagsThatDriftedOrWereNeverSet() throws Exception {
+        vehicle(1, null, null, 11, ACTIVE, null);
+        vehicle(2, null, null, 1, LAPSED, null);
+        vehicle(3, TODAY.plusDays(1), null, 10, ACTIVE, TODAY.plusDays(1));
+        // as if changed behind the trigger's back, or new columns not yet populated
+        jdbc.update("UPDATE vehicle_status SET a_or_b_rego_fl = 'N' WHERE vehicle_id = 1");
+        jdbc.update("UPDATE vehicle_status SET lapsed_fl = NULL WHERE vehicle_id = 2");
+        jdbc.update("UPDATE vehicle_status SET inspection_valid_fl = NULL, a_or_b_rego_fl = NULL, "
+                + "exempt_fl = NULL WHERE vehicle_id = 3");
+
+        JobExecution execution = run(TODAY);
+
+        assertThat(execution.getStepExecutions().iterator().next().getWriteCount()).isEqualTo(3);
+        assertThat(flags(1)).containsExactly("Y", "Y", "Y", "N", "N");
+        assertThat(flags(2)).containsExactly("Y", "Y", "N", "Y", "N");
+        assertThat(flags(3)).containsExactly("Y", "Y", "Y", "N", "Y");
     }
 
     @Test
@@ -92,7 +118,7 @@ class ComplianceJobTests {
 
         assertThat(again.getExitStatus().getExitCode()).isEqualTo("COMPLETED");
         assertThat(again.getStepExecutions().iterator().next().getReadCount()).isZero();
-        assertThat(flags(1)).containsExactly("N", "Y");
+        assertThat(flags(1)).containsExactly("N", "Y", "N", "N", "N");
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'batch\\_%'", Integer.class))
                 .isZero();
@@ -105,20 +131,33 @@ class ComplianceJobTests {
 
         assertThat(jobLauncher.run(complianceJob, new JobParametersBuilder().toJobParameters())
                 .getExitStatus().getExitCode()).isEqualTo("COMPLETED");
-        assertThat(flags(1)).containsExactly("Y", "N");
+        assertThat(flags(1)).containsExactly("Y", "N", "N", "N", "N");
+    }
+
+    private JobExecution run(LocalDate asOf) throws Exception {
+        return jobLauncher.run(complianceJob,
+                new JobParametersBuilder().addString("asOf", asOf.toString()).toJobParameters());
     }
 
     private void vehicle(int id, LocalDate inspection, LocalDate licence) {
-        jdbc.update("INSERT INTO vehicle (vehicle_id, inspection_expiry_dt, licence_expiry_dt) VALUES (?, ?, ?)",
-                id, inspection, licence);
+        vehicle(id, inspection, licence, 1, ACTIVE, null);
     }
 
-    private Map<String, Object> status(int id) {
-        return jdbc.queryForMap("SELECT * FROM vehicle_status WHERE vehicle_id = ?", id);
+    private void vehicle(int id, LocalDate inspection, LocalDate licence, int usage, int regtStatus,
+            LocalDate exemptEnd) {
+        jdbc.update("INSERT INTO vehicle (vehicle_id, inspection_expiry_dt, licence_expiry_dt, vehicle_usage_cd, "
+                + "regt_status_cd, exempt_end_dt) VALUES (?, ?, ?, ?, ?, ?)",
+                id, inspection, licence, usage, regtStatus, exemptEnd);
     }
 
+    /** inspection, licence, a/b rego, lapsed, exempt */
     private List<String> flags(int id) {
-        Map<String, Object> row = status(id);
-        return List.of((String) row.get("inspection_valid_fl"), (String) row.get("licence_valid_fl"));
+        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM vehicle_status WHERE vehicle_id = ?", id);
+        return List.of(
+                (String) row.get("inspection_valid_fl"),
+                (String) row.get("licence_valid_fl"),
+                (String) row.get("a_or_b_rego_fl"),
+                (String) row.get("lapsed_fl"),
+                (String) row.get("exempt_fl"));
     }
 }

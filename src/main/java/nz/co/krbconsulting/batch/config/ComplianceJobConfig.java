@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import javax.sql.DataSource;
 
 import lombok.extern.slf4j.Slf4j;
+import nz.co.krbconsulting.batch.domain.ComplianceUpdate;
 import nz.co.krbconsulting.batch.domain.VehicleCompliance;
 import nz.co.krbconsulting.batch.infrastructure.ComplianceJdbc;
 import org.springframework.batch.core.ExitStatus;
@@ -26,7 +27,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
- * Brings the inspection/licence validity flags up to date for the passage of time.
+ * Brings the vehicle status flags (inspection, licence, A/B rego, lapsed, exempt) up to date as time passes.
  *
  * <p>Stateless: the job repository is Spring Batch's in-memory default, so nothing beyond vehicle_status is written
  * to the database. The work is idempotent (only still-stale rows are selected), so a failed run is recovered by
@@ -56,10 +57,10 @@ public class ComplianceJobConfig {
             PlatformTransactionManager transactionManager,
             ComplianceProperties properties,
             JdbcPagingItemReader<VehicleCompliance> staleComplianceReader,
-            ItemProcessor<VehicleCompliance, VehicleCompliance> complianceProcessor,
-            JdbcBatchItemWriter<VehicleCompliance> complianceWriter) {
+            ItemProcessor<VehicleCompliance, ComplianceUpdate> complianceProcessor,
+            JdbcBatchItemWriter<ComplianceUpdate> complianceWriter) {
         return new StepBuilder("complianceStep", jobRepository)
-                .<VehicleCompliance, VehicleCompliance>chunk(properties.chunkSize())
+                .<VehicleCompliance, ComplianceUpdate>chunk(properties.chunkSize())
                 // one short database transaction per chunk
                 .transactionManager(transactionManager)
                 .reader(staleComplianceReader)
@@ -89,7 +90,7 @@ public class ComplianceJobConfig {
 
     @Bean
     @StepScope
-    ItemProcessor<VehicleCompliance, VehicleCompliance> complianceProcessor(
+    ItemProcessor<VehicleCompliance, ComplianceUpdate> complianceProcessor(
             @Value("#{jobParameters['asOf']}") String asOf, Clock clock) {
         LocalDate day = resolve(asOf, clock);
         log.info("Reassessing vehicle compliance as of {}", day);
@@ -97,7 +98,7 @@ public class ComplianceJobConfig {
     }
 
     @Bean
-    JdbcBatchItemWriter<VehicleCompliance> complianceWriter(DataSource dataSource) {
+    JdbcBatchItemWriter<ComplianceUpdate> complianceWriter(DataSource dataSource) {
         return ComplianceJdbc.complianceWriter(dataSource);
     }
 

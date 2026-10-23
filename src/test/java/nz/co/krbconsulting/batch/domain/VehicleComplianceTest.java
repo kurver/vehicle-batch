@@ -21,14 +21,45 @@ class VehicleComplianceTest {
     }
 
     @Test
-    void flagsGoStaleOncePastExpiry() {
-        var vehicle = new VehicleCompliance(1, new Expiry(DAY), new Expiry(null), true, true);
+    void exemptThroughTheEndDateAndNotExemptWithoutOne() {
+        assertThat(new Exemption(DAY).isExemptOn(DAY)).isTrue();
+        assertThat(new Exemption(DAY).isExemptOn(DAY.plusDays(1))).isFalse();
+        assertThat(new Exemption(null).isExemptOn(DAY)).isFalse();
+    }
 
-        assertThat(vehicle.reassessedOn(DAY)).isEmpty();
-        assertThat(vehicle.reassessedOn(DAY.plusDays(1)))
-                .hasValueSatisfying(v -> {
-                    assertThat(v.inspectionValid()).isFalse();
-                    assertThat(v.licenceValid()).isTrue();
-                });
+    @Test
+    void usageTenAndElevenAreAOrBRego() {
+        assertThat(new VehicleUsage(10).isAOrBRego()).isTrue();
+        assertThat(new VehicleUsage(11).isAOrBRego()).isTrue();
+        assertThat(new VehicleUsage(12).isAOrBRego()).isFalse();
+        assertThat(new VehicleUsage(null).isAOrBRego()).isFalse();
+    }
+
+    @Test
+    void onlyStatusFiveIsLapsed() {
+        assertThat(new RegistrationStatus(RegistrationStatus.LAPSED).isLapsed()).isTrue();
+        assertThat(new RegistrationStatus(RegistrationStatus.ACTIVE).isLapsed()).isFalse();
+        assertThat(new RegistrationStatus(null).isLapsed()).isFalse();
+    }
+
+    @Test
+    void flagsGoStaleOncePastADate() {
+        var vehicle = new Vehicle(1, new Expiry(DAY), new Expiry(null), new VehicleUsage(10),
+                new RegistrationStatus(1), new Exemption(DAY));
+        var recorded = new ComplianceFlags(true, true, true, false, true);
+        var compliance = new VehicleCompliance(vehicle, recorded);
+
+        assertThat(compliance.reassessedOn(DAY)).isEmpty();
+        assertThat(compliance.reassessedOn(DAY.plusDays(1)))
+                .hasValue(new ComplianceUpdate(1, new ComplianceFlags(false, true, true, false, false)));
+    }
+
+    @Test
+    void missingRecordedFlagsAreAlwaysRewritten() {
+        var vehicle = new Vehicle(1, new Expiry(null), new Expiry(null), new VehicleUsage(null),
+                new RegistrationStatus(null), new Exemption(null));
+
+        assertThat(new VehicleCompliance(vehicle, null).reassessedOn(DAY))
+                .hasValue(new ComplianceUpdate(1, new ComplianceFlags(true, true, false, false, false)));
     }
 }
