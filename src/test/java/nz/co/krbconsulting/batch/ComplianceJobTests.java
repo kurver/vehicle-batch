@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
-import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -37,7 +37,7 @@ class ComplianceJobTests {
     JdbcTemplate jdbc;
 
     @Autowired
-    JobLauncher jobLauncher;
+    JobOperator jobOperator;
 
     @Autowired
     Job complianceJob;
@@ -111,10 +111,10 @@ class ComplianceJobTests {
         vehicle(1, asOf.minusDays(1), null);
         var params = new JobParametersBuilder().addString("asOf", asOf.toString());
 
-        assertThat(jobLauncher.run(complianceJob, params.toJobParameters()).getExitStatus().getExitCode())
+        assertThat(jobOperator.start(complianceJob, params.toJobParameters()).getExitStatus().getExitCode())
                 .isEqualTo("COMPLETED");
         // each CronJob pod is a fresh JVM with an empty in-memory repository; "attempt" stands in for that here
-        JobExecution again = jobLauncher.run(complianceJob, params.addLong("attempt", 2L).toJobParameters());
+        JobExecution again = jobOperator.start(complianceJob, params.addLong("attempt", 2L).toJobParameters());
 
         assertThat(again.getExitStatus().getExitCode()).isEqualTo("COMPLETED");
         assertThat(again.getStepExecutions().iterator().next().getReadCount()).isZero();
@@ -129,13 +129,13 @@ class ComplianceJobTests {
         vehicle(1, TODAY, TODAY.minusDays(1));
         jdbc.update("UPDATE vehicle_status SET licence_valid_fl = 'Y' WHERE vehicle_id = 1"); // simulate going stale
 
-        assertThat(jobLauncher.run(complianceJob, new JobParametersBuilder().toJobParameters())
+        assertThat(jobOperator.start(complianceJob, new JobParametersBuilder().toJobParameters())
                 .getExitStatus().getExitCode()).isEqualTo("COMPLETED");
         assertThat(flags(1)).containsExactly("Y", "N", "N", "N", "N");
     }
 
     private JobExecution run(LocalDate asOf) throws Exception {
-        return jobLauncher.run(complianceJob,
+        return jobOperator.start(complianceJob,
                 new JobParametersBuilder().addString("asOf", asOf.toString()).toJobParameters());
     }
 
