@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/batch
+    username: ${DB_USER:batch}
+    password: ${DB_PASSWORD:batch}

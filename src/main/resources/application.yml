@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: spring-batch
+  main:
+    web-application-type: none
+  batch:
+    job:
+      enabled: true
+  profiles:
+    default: postgres
+
+compliance:
+  chunk-size: 1000

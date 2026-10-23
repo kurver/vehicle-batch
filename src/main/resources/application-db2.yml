@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    # concurrentAccessResolution=2: read the last committed row instead of waiting on other transactions' locks
+    url: jdbc:db2://${DB_HOST:localhost}:50000/${DB_NAME:BATCH}:concurrentAccessResolution=2;
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
