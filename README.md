@@ -127,8 +127,8 @@ vehicle_status (vehicle_id INTEGER, inspection_valid_fl CHAR(1), licence_valid_f
 ## Building and testing
 
 ```bash
-mvn verify            # unit + integration tests; Docker must be running (Testcontainers starts Postgres)
-mvn package -Pdb2     # production jar, including the DB2 JDBC driver
+./mvnw verify          # unit + integration tests; Docker must be running (Testcontainers starts Postgres)
+./mvnw package -Pdb2   # production jar, including the DB2 JDBC driver
 ```
 
 - The DB2 driver is only included with `-Pdb2`. The default build has only the Postgres driver.
