@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>25</java.version>
+        <!-- Default for @{argLine} in surefire; plugins like JaCoCo may prepend to it -->
+        <argLine></argLine>
     </properties>
 
     <dependencies>
@@ -91,6 +93,27 @@
                             <artifactId>lombok</artifactId>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- Exposes ${org.mockito:mockito-core:jar} for the surefire argLine -->
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Load Mockito's inline mock maker as an agent at startup instead of self-attaching (JEP 451);
+                         -Xshare:off avoids the CDS warning caused by Mockito appending to the bootstrap classpath -->
+                    <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
                 </configuration>
             </plugin>
             <plugin>
