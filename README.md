@@ -242,7 +242,9 @@ the column first.
 
 - **DB2 trigger not written yet.** Only the Postgres version exists (`db/postgres/vehicle_status_trigger.sql`).
 - **Each run scans the whole join.** The job checks every flag on every row, and the legacy schema has no index that
-  would help. If run times or database load become a problem, ask the DBAs about indexes, or narrow the job's query to
-  the date-based flags and leave the code-based flags to the trigger.
+  would help. In the volume test (12M vehicles, Postgres) that scan is about 5s, a normal day about 8s and a full
+  backfill about 3 minutes; see [README-volume-test.md](README-volume-test.md). DB2 timings still need measuring. If
+  run times or database load become a problem, ask the DBAs about indexes, or narrow the job's query to the date-based
+  flags and leave the code-based flags to the trigger.
 - **No run history.** This is deliberate, because the job keeps no database state. Run history lives in the pod logs
   and the k8s Job history, so keep those for as long as you need them.
