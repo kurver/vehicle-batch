@@ -73,7 +73,8 @@ batches.
 
 The rules live in three places. The domain (`Vehicle#flagsOn`) is the authoritative version. The `WHERE` clause in
 `ComplianceSql` and the trigger repeat the rules so the database can filter rows before they reach the job. If a rule
-changes, update all three.
+changes, update all three. `ComplianceRulesConsistencyTests` checks the other two against the domain over every
+combination of boundary inputs, so a copy that falls out of line fails the build.
 
 ## Code structure
 
@@ -108,6 +109,7 @@ src/main/resources/
 src/test/
 ├── java/.../domain/VehicleComplianceTest.java   unit tests for the validity rule
 ├── java/.../ComplianceJobTests.java             integration tests: Testcontainers Postgres, trigger and job
+├── java/.../infrastructure/ComplianceRulesConsistencyTests.java   SQL and trigger rules agree with the domain
 └── resources/db/test-schema.sql                 stand-in for the legacy tables
 ```
 

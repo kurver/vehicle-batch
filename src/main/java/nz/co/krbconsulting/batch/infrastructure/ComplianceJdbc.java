@@ -73,7 +73,7 @@ public final class ComplianceJdbc {
                 .build();
     }
 
-    private static VehicleCompliance mapRow(ResultSet rs, int rowNum) throws SQLException {
+    static VehicleCompliance mapRow(ResultSet rs, int rowNum) throws SQLException {
         var vehicle = new Vehicle(
                 rs.getLong("vehicle_id"),
                 new Expiry(rs.getObject("inspection_expiry_dt", LocalDate.class)),
