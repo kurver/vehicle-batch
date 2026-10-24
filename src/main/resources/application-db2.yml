@@ -2,6 +2,8 @@ spring:
   datasource:
     # concurrentAccessResolution=2: read the last committed row instead of waiting on other transactions' locks
     # no defaults for host or database: a missing env var fails the run rather than connecting somewhere unintended
-    url: jdbc:db2://${DB_HOST}:${DB_PORT:50000}/${DB_NAME}:concurrentAccessResolution=2;
+    # currentLockTimeout: give up on a lock after this many seconds (the chunk rolls back and the run fails) instead of
+    # DB2's default of waiting forever. Honoured by DB2 for Linux, UNIX and Windows
+    url: jdbc:db2://${DB_HOST}:${DB_PORT:50000}/${DB_NAME}:concurrentAccessResolution=2;currentLockTimeout=${DB_LOCK_TIMEOUT:30};
     username: ${DB_USER}
     password: ${DB_PASSWORD}

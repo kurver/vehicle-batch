@@ -147,6 +147,7 @@ vehicle_status (vehicle_id INTEGER, inspection_valid_fl CHAR(1), licence_valid_f
 | Database | `SPRING_PROFILES_ACTIVE=db2` | The default profile is `postgres` (localhost), for local use only |
 | `DB_HOST`, `DB_NAME` | env, required | DB2 host and database. There are no defaults, so if either is missing the run fails with `"${DB_HOST}" is unknown host` (or similar) |
 | `DB_PORT` | env, optional | DB2 port, default 50000 |
+| `DB_LOCK_TIMEOUT` | env, optional | Seconds to wait for a row lock before giving up, default 30. On timeout the current chunk rolls back and the run fails, so the k8s Job retries it |
 | `DB_USER`, `DB_PASSWORD` | env, from a k8s Secret | Needs `SELECT` on `vehicle` and `vehicle_status`, and `UPDATE` on `vehicle_status`. Nothing else |
 | `COMPLIANCE_CHUNK_SIZE` | env, optional | Rows per transaction, default 1000. Lower it to go easier on the database, raise it to finish faster |
 | `TZ` | built into the image: `Pacific/Auckland` | Decides what "today" is. Must match the database's `CURRENT_DATE`, which the trigger uses. The base image needs timezone data (`tzdata`) |
@@ -171,6 +172,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2                # retrying is always safe
+      activeDeadlineSeconds: 14400   # kill a stuck run after 4h (all attempts); raise it for a full backfill
       template:
         spec:
           restartPolicy: Never
@@ -215,7 +217,7 @@ the column first.
    ```bash
    kubectl create job --from=cronjob/vehicle-compliance vehicle-compliance-manual-$(date +%s)
    ```
-3. If retries keep failing, `backoffLimit` stops them. The cause is outside the job: database availability,
+3. If retries keep failing, `backoffLimit` stops them, and `activeDeadlineSeconds` stops a run that hangs. The cause is outside the job: database availability,
    credentials, or schema changes to the legacy tables.
 
 ### Common operational tasks
