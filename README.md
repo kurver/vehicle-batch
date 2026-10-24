@@ -245,6 +245,7 @@ the column first.
   would help. In the volume test (12M vehicles, Postgres) that scan is about 5s, a normal day about 8s and a full
   backfill about 3 minutes; see [README-volume-test.md](README-volume-test.md). DB2 timings still need measuring. If
   run times or database load become a problem, ask the DBAs about indexes, or narrow the job's query to the date-based
-  flags and leave the code-based flags to the trigger.
+  flags and leave the code-based flags to the trigger. A change to per-flag delta queries is planned, with two options
+  waiting on the DBAs; see [README-delta-run-options.md](README-delta-run-options.md).
 - **No run history.** This is deliberate, because the job keeps no database state. Run history lives in the pod logs
   and the k8s Job history, so keep those for as long as you need them.
