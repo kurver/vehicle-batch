@@ -21,6 +21,9 @@
         <java.version>25</java.version>
         <!-- Default for @{argLine} in surefire; plugins like JaCoCo may prepend to it -->
         <argLine></argLine>
+        <!-- The volume test (12M rows, see README-volume-test.md) only runs with -Pvolume -->
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>volume</surefire.excludedGroups>
     </properties>
 
     <dependencies>
@@ -73,6 +76,13 @@
                 </dependency>
             </dependencies>
         </profile>
+        <profile>
+            <id>volume</id>
+            <properties>
+                <surefire.groups>volume</surefire.groups>
+                <surefire.excludedGroups></surefire.excludedGroups>
+            </properties>
+        </profile>
     </profiles>
 
     <build>
@@ -96,6 +106,8 @@
                     <!-- Load Mockito's inline mock maker as an agent at startup instead of self-attaching (JEP 451);
                          -Xshare:off avoids the CDS warning caused by Mockito appending to the bootstrap classpath -->
                     <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
+                    <groups>${surefire.groups}</groups>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>
