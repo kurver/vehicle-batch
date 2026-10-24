@@ -3,7 +3,7 @@
 A command-line Spring Batch job that keeps the derived Y/N status flags in `vehicle_status` correct as time
 passes. It runs as a Kubernetes CronJob against a busy legacy DB2 database. Tests run against Postgres.
 
-Java 25, Spring Boot 4.1.1 (Spring Batch 6), Maven, Lombok, SLF4J.
+Java 25, Spring Boot 4.1.1 (Spring Batch 6), Maven, SLF4J.
 
 ## The problem
 
@@ -134,8 +134,6 @@ vehicle_status (vehicle_id INTEGER, inspection_valid_fl CHAR(1), licence_valid_f
 ```
 
 - The DB2 driver is only included with `-Pdb2`. The default build has only the Postgres driver.
-- Lombok's annotation processor is set explicitly in the compiler plugin, because JDK 23+ no longer runs annotation
-  processors found on the classpath by default.
 - Integration tests use `postgres:17-alpine`, with `test-schema.sql` and the Postgres trigger applied as init scripts.
   DB2 isn't tested directly, so keep all job SQL DB2-compatible. For example, don't use `RETURNING`, `ILIKE`, `::` casts
   or `ON CONFLICT`.

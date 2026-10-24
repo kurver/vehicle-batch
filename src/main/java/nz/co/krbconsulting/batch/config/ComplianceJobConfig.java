@@ -4,10 +4,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import javax.sql.DataSource;
 
-import lombok.extern.slf4j.Slf4j;
 import nz.co.krbconsulting.batch.domain.ComplianceUpdate;
 import nz.co.krbconsulting.batch.domain.VehicleCompliance;
 import nz.co.krbconsulting.batch.infrastructure.ComplianceJdbc;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
@@ -33,10 +34,11 @@ import org.springframework.transaction.PlatformTransactionManager;
  * to the database. The work is idempotent (only still-stale rows are selected), so a failed run is recovered by
  * simply running again. {@code asOf=YYYY-MM-DD} pins the date, otherwise it is today.
  */
-@Slf4j
 @Configuration
 @EnableConfigurationProperties(ComplianceProperties.class)
 public class ComplianceJobConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(ComplianceJobConfig.class);
 
     @Bean
     Clock clock() {
