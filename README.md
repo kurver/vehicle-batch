@@ -111,6 +111,8 @@ src/test/
 ├── java/.../domain/VehicleComplianceTest.java   unit tests for the validity rule
 ├── java/.../ComplianceJobTests.java             integration tests: Testcontainers Postgres, trigger and job
 ├── java/.../infrastructure/ComplianceRulesConsistencyTests.java   SQL and trigger rules agree with the domain
+├── java/.../infrastructure/ComplianceJdbcTests.java   row mapping, Y/N conversion, rows deleted mid-run
+├── java/.../config/CompliancePropertiesTest.java      compliance.* defaults and validation
 └── resources/db/test-schema.sql                 stand-in for the legacy tables
 ```
 
