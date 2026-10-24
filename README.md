@@ -69,7 +69,8 @@ batches.
 5. **Rows deleted mid-run are skipped.** If a vehicle is deleted after it was read, its status row is gone too, and the
    update quietly affects 0 rows.
 6. **Only `vehicle_status` is written.** The job never writes to `vehicle`, and none of its updates fire the trigger.
-   The Postgres trigger also only fires on `UPDATE` when an expiry column changes (`UPDATE OF ...`).
+   The Postgres trigger also only fires on an `UPDATE` that sets one of the five source columns (`UPDATE OF ...`).
+   It fires whenever one of them is in the `SET` list, even if the value doesn't change.
 
 The rules live in three places. The domain (`Vehicle#flagsOn`) is the authoritative version. The `WHERE` clause in
 `ComplianceSql` and the trigger repeat the rules so the database can filter rows before they reach the job. If a rule
@@ -228,7 +229,7 @@ the column first.
 | Set flags as of a specific date (testing, investigation) | Run with the argument `asOf=YYYY-MM-DD`, for example a manual Job with `args: ["asOf=2026-10-24"]`. In production this sets the date-based flags as of that date, not today, until the next normal run puts them back |
 | The database is under pressure | Lower `COMPLIANCE_CHUNK_SIZE`, for example to 200, to make transactions shorter, or move the schedule to a quieter time |
 | Stop a run that's in progress | `kubectl delete job <job-name>`. Committed chunks stay committed, the current chunk rolls back, and the next run carries on |
-| Check whether any flags are stale | Run the job's own query by hand: the `FROM` and `WHERE` in `ComplianceSql`, with `:asOf` replaced by `CURRENT_DATE`, as a `SELECT COUNT(*)`. This should be 0 after a successful run |
+| Check whether any flags are stale | Run the job's own query by hand: the `FROM` and `WHERE` in `ComplianceSql`, with `:asOf` replaced by `CURRENT_DATE`, as a `SELECT COUNT(*)`. This should be 0 for the rest of the day after a successful run. From midnight it also counts the vehicles whose dates passed that day, until the next run. Any other non-zero count means a change bypassed the trigger |
 | Check for missing or orphaned status rows (trigger health) | Look for vehicles with no `vehicle_status` row, and status rows with no vehicle. The job doesn't create or delete status rows; that's the trigger's job |
 
 ### Known limitations and follow-ups
