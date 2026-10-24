@@ -11,29 +11,30 @@ package nz.co.krbconsulting.batch.infrastructure;
 final class ComplianceSql {
 
     static final String SELECT = """
-            vehicle_id, inspection_expiry_dt, licence_expiry_dt, vehicle_usage_cd, regt_status_cd, exempt_end_dt, \
-            inspection_valid_fl, licence_valid_fl, a_or_b_rego_fl, lapsed_fl, exempt_fl""";
+            v.vehicle_id, v.inspection_expiry_dt, v.licence_expiry_dt, v.vehicle_usage_cd, v.regt_status_cd, \
+            v.exempt_end_dt, \
+            s.inspection_valid_fl, s.licence_valid_fl, s.a_or_b_rego_fl, s.lapsed_fl, s.exempt_fl""";
 
-    /**
-     * A derived table so the paging key {@code vehicle_id} is unambiguous across the two tables; both databases
-     * merge it into the outer query, so the predicates still reach the base tables.
-     */
-    static final String FROM = """
-            (SELECT v.vehicle_id, v.inspection_expiry_dt, v.licence_expiry_dt, \
-            v.vehicle_usage_cd, v.regt_status_cd, v.exempt_end_dt, \
-            s.inspection_valid_fl, s.licence_valid_fl, s.a_or_b_rego_fl, s.lapsed_fl, s.exempt_fl \
-            FROM vehicle v JOIN vehicle_status s ON s.vehicle_id = v.vehicle_id) c""";
+    static final String FROM = "vehicle v JOIN vehicle_status s ON s.vehicle_id = v.vehicle_id";
 
     static final String WHERE = """
-            COALESCE(inspection_valid_fl, '?') <> \
+            (COALESCE(inspection_valid_fl, '?') <> \
             CASE WHEN inspection_expiry_dt IS NULL OR inspection_expiry_dt >= :asOf THEN 'Y' ELSE 'N' END \
             OR COALESCE(licence_valid_fl, '?') <> \
             CASE WHEN licence_expiry_dt IS NULL OR licence_expiry_dt >= :asOf THEN 'Y' ELSE 'N' END \
             OR COALESCE(a_or_b_rego_fl, '?') <> CASE WHEN vehicle_usage_cd IN (10, 11) THEN 'Y' ELSE 'N' END \
             OR COALESCE(lapsed_fl, '?') <> CASE WHEN regt_status_cd = 5 THEN 'Y' ELSE 'N' END \
-            OR COALESCE(exempt_fl, '?') <> CASE WHEN exempt_end_dt >= :asOf THEN 'Y' ELSE 'N' END""";
+            OR COALESCE(exempt_fl, '?') <> CASE WHEN exempt_end_dt >= :asOf THEN 'Y' ELSE 'N' END)""";
 
+    /** The paging key, as the result column the reader takes the last value from. */
     static final String SORT_KEY = "vehicle_id";
+
+    /**
+     * Keyset paging after the last key read. The key is bound once and compared on both tables so that each table's
+     * index scan starts at the key; Postgres doesn't carry a range condition across a join, so with only
+     * {@code v.vehicle_id > ...} it read vehicle_status from the start on every page.
+     */
+    static final String AFTER_LAST_KEY = "v.vehicle_id > :_vehicle_id AND s.vehicle_id > :_vehicle_id";
 
     static final String UPDATE = """
             UPDATE vehicle_status \
@@ -42,5 +43,18 @@ final class ComplianceSql {
             WHERE vehicle_id = :vehicleId""";
 
     private ComplianceSql() {
+    }
+
+    static String firstPage(int pageSize) {
+        return page(WHERE, pageSize);
+    }
+
+    static String nextPage(int pageSize) {
+        return page(AFTER_LAST_KEY + " AND " + WHERE, pageSize);
+    }
+
+    private static String page(String where, int pageSize) {
+        return "SELECT " + SELECT + " FROM " + FROM + " WHERE " + where
+                + " ORDER BY v.vehicle_id FETCH FIRST " + pageSize + " ROWS ONLY";
     }
 }

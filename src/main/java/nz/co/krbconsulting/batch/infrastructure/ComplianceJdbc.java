@@ -16,10 +16,8 @@ import nz.co.krbconsulting.batch.domain.VehicleCompliance;
 import nz.co.krbconsulting.batch.domain.VehicleUsage;
 import org.springframework.batch.infrastructure.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.infrastructure.item.database.JdbcPagingItemReader;
-import org.springframework.batch.infrastructure.item.database.Order;
 import org.springframework.batch.infrastructure.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.infrastructure.item.database.builder.JdbcPagingItemReaderBuilder;
-import org.springframework.batch.infrastructure.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 
 /** JDBC adapters between the legacy tables and the domain. */
@@ -29,23 +27,17 @@ public final class ComplianceJdbc {
     }
 
     /**
-     * Keyset-paged (vehicle_id &gt; last) rather than OFFSET, so every page is a short range query. No reader state
-     * is saved: committed rows drop out of the query, so a fresh run naturally picks up where a failed one stopped.
+     * Keyset-paged (vehicle_id &gt; last, on both tables) rather than OFFSET, so every page is a short range query.
+     * No reader state is saved: committed rows drop out of the query, so a fresh run naturally picks up where a
+     * failed one stopped.
      */
     public static JdbcPagingItemReader<VehicleCompliance> staleComplianceReader(
             DataSource dataSource, LocalDate asOf, int pageSize) throws Exception {
-        var queryProvider = new SqlPagingQueryProviderFactoryBean();
-        queryProvider.setDataSource(dataSource);
-        queryProvider.setSelectClause(ComplianceSql.SELECT);
-        queryProvider.setFromClause(ComplianceSql.FROM);
-        queryProvider.setWhereClause(ComplianceSql.WHERE);
-        queryProvider.setSortKeys(Map.of(ComplianceSql.SORT_KEY, Order.ASCENDING));
-
         return new JdbcPagingItemReaderBuilder<VehicleCompliance>()
                 .name("staleComplianceReader")
                 .saveState(false)
                 .dataSource(dataSource)
-                .queryProvider(queryProvider.getObject())
+                .queryProvider(new StaleCompliancePagingQueryProvider())
                 .parameterValues(Map.of("asOf", asOf))
                 .pageSize(pageSize)
                 .fetchSize(pageSize)

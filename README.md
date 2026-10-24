@@ -57,10 +57,12 @@ batches.
    SQL as of `asOf`, and returns only rows where a stored flag differs or is `NULL`. The database still scans the join,
    but only rows that need an update are sent to the job, and only those are written. On a normal day that's the
    vehicles whose dates passed since the last run, not the ~11M rows in the table.
-2. **Keyset paging.** Each page is `... AND vehicle_id > :lastSeen ORDER BY vehicle_id FETCH FIRST n ROWS`. There's no
-   OFFSET, so every page is a short range read and no cursor or transaction is held open across the run. The join is
-   wrapped in a derived table so the paging key `vehicle_id` isn't ambiguous between the two tables. Both databases fold
-   the derived table back into the main query.
+2. **Keyset paging.** Each page is `... WHERE v.vehicle_id > :last AND s.vehicle_id > :last AND ... ORDER BY
+   v.vehicle_id FETCH FIRST n ROWS ONLY`. There's no OFFSET, so every page is a short range read and no cursor or
+   transaction is held open across the run. The last key is compared on both tables on purpose: Postgres doesn't carry
+   a range condition across a join, so with it on `vehicle` alone every page read `vehicle_status` from the start, and a
+   12M-row backfill took hours (see [README-volume-test.md](README-volume-test.md)). The job supplies this query itself
+   (`StaleCompliancePagingQueryProvider`), as one plain SQL query for both databases.
 3. **Short transactions.** Each chunk (`compliance.chunk-size`, default 1000) commits in one short transaction:
    - one page read;
    - one batched `UPDATE vehicle_status ... WHERE vehicle_id = ?`.
@@ -96,6 +98,7 @@ src/main/java/nz/co/krbconsulting/batch/
 │   └── ComplianceUpdate.java      corrected flags to store for one vehicle
 ├── infrastructure/                adapters between the legacy tables and the domain
 │   ├── ComplianceSql.java         every table and column name and every query, in one place
+│   ├── StaleCompliancePagingQueryProvider.java   the reader's page queries, one SQL for DB2 and Postgres
 │   └── ComplianceJdbc.java        keyset-paged reader, batch update writer, row mapping and Y/N conversion
 └── config/
     ├── ComplianceJobConfig.java   job and step wiring: reader → processor (domain) → writer, plus a run summary log line
@@ -134,6 +137,7 @@ vehicle_status (vehicle_id INTEGER, inspection_valid_fl CHAR(1), licence_valid_f
 ```bash
 ./mvnw verify          # unit + integration tests; Docker must be running (Testcontainers starts Postgres)
 ./mvnw package -Pdb2   # production jar, including the DB2 JDBC driver
+./mvnw verify -Pvolume # volume test only: the job over 12M vehicles, see README-volume-test.md
 ```
 
 - The DB2 driver is only included with `-Pdb2`. The default build has only the Postgres driver.

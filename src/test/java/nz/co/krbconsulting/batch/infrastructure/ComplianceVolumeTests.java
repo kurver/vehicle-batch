@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterAll;
@@ -26,7 +25,6 @@ import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.step.StepExecution;
-import org.springframework.batch.infrastructure.item.database.support.PostgresPagingQueryProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -204,7 +202,7 @@ class ComplianceVolumeTests {
                        round(total_exec_time::numeric)
                   FROM pg_stat_statements
                  WHERE query LIKE '%vehicle_status%' AND query NOT LIKE '%pg_stat_statements%'
-                   AND (query LIKE 'UPDATE%' OR query LIKE 'SELECT%LIMIT%')
+                   AND (query LIKE 'UPDATE%' OR query LIKE 'SELECT%ROWS ONLY%')
                  ORDER BY total_exec_time DESC""",
                 (rs, n) -> "| %s | %,d | %s | %s | %s |".formatted(rs.getString(1), rs.getLong(2),
                         rs.getBigDecimal(3), rs.getBigDecimal(4), rs.getBigDecimal(5)));
@@ -213,16 +211,11 @@ class ComplianceVolumeTests {
 
     /** EXPLAIN ANALYZE of the job's page query, at the start of the table and halfway through. */
     private void pagePlans(String scenario) {
-        var provider = new PostgresPagingQueryProvider();
-        provider.setSelectClause(ComplianceSql.SELECT);
-        provider.setFromClause(ComplianceSql.FROM);
-        provider.setWhereClause(ComplianceSql.WHERE);
-        provider.setSortKeys(Map.of(ComplianceSql.SORT_KEY,
-                org.springframework.batch.infrastructure.item.database.Order.ASCENDING));
+        var provider = new StaleCompliancePagingQueryProvider();
         String asOf = "DATE '" + DAY + "'";
         String first = provider.generateFirstPageQuery(CHUNK_SIZE).replace(":asOf", asOf);
         String later = provider.generateRemainingPagesQuery(CHUNK_SIZE).replace(":asOf", asOf)
-                .replace("(vehicle_id > ?)", "(vehicle_id > " + VEHICLES / 2 + ")");
+                .replace(":_vehicle_id", String.valueOf(VEHICLES / 2));
 
         plan(scenario + ": first page", first);
         plan(scenario + ": page starting halfway", later);

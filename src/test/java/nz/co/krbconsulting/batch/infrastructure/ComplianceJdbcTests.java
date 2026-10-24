@@ -119,7 +119,7 @@ class ComplianceJdbcTests {
 
     private VehicleCompliance read(int id) {
         return jdbc.queryForObject("SELECT " + ComplianceSql.SELECT + " FROM " + ComplianceSql.FROM
-                + " WHERE vehicle_id = ?", ComplianceJdbc::mapRow, id);
+                + " WHERE v.vehicle_id = ?", ComplianceJdbc::mapRow, id);
     }
 
     private void vehicle(int id, LocalDate inspection, LocalDate licence, Integer usage, Integer regtStatus,
