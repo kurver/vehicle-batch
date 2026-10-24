@@ -145,7 +145,8 @@ vehicle_status (vehicle_id INTEGER, inspection_valid_fl CHAR(1), licence_valid_f
 | Setting | How it's set | Notes |
 |---|---|---|
 | Database | `SPRING_PROFILES_ACTIVE=db2` | The default profile is `postgres` (localhost), for local use only |
-| `DB_HOST`, `DB_NAME` | env | DB2 host and database. The port is fixed at 50000 in `application-db2.yml` |
+| `DB_HOST`, `DB_NAME` | env, required | DB2 host and database. There are no defaults, so if either is missing the run fails with `"${DB_HOST}" is unknown host` (or similar) |
+| `DB_PORT` | env, optional | DB2 port, default 50000 |
 | `DB_USER`, `DB_PASSWORD` | env, from a k8s Secret | Needs `SELECT` on `vehicle` and `vehicle_status`, and `UPDATE` on `vehicle_status`. Nothing else |
 | `COMPLIANCE_CHUNK_SIZE` | env, optional | Rows per transaction, default 1000. Lower it to go easier on the database, raise it to finish faster |
 | `TZ` | built into the image: `Pacific/Auckland` | Decides what "today" is. Must match the database's `CURRENT_DATE`, which the trigger uses. The base image needs timezone data (`tzdata`) |
