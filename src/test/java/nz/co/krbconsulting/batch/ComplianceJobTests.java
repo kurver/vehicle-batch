@@ -134,6 +134,18 @@ class ComplianceJobTests {
         assertThat(flags(1)).containsExactly("Y", "N", "N", "N", "N");
     }
 
+    @Test
+    void malformedAsOfFailsTheRun() throws Exception {
+        vehicle(1, TODAY.minusDays(1), null);
+        jdbc.update("UPDATE vehicle_status SET inspection_valid_fl = 'Y' WHERE vehicle_id = 1");
+
+        JobExecution execution = jobOperator.start(complianceJob,
+                new JobParametersBuilder().addString("asOf", "24/10/2026").toJobParameters());
+
+        assertThat(execution.getExitStatus().getExitCode()).isEqualTo("FAILED");
+        assertThat(flags(1)).containsExactly("Y", "Y", "N", "N", "N"); // nothing written
+    }
+
     private JobExecution run(LocalDate asOf) throws Exception {
         return jobOperator.start(complianceJob,
                 new JobParametersBuilder().addString("asOf", asOf.toString()).toJobParameters());

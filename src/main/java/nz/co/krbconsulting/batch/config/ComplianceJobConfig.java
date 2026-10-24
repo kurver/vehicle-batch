@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
+import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.listener.JobExecutionListener;
 import org.springframework.batch.core.listener.StepExecutionListener;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.Step;
@@ -40,6 +42,9 @@ public class ComplianceJobConfig {
 
     private static final Logger log = LoggerFactory.getLogger(ComplianceJobConfig.class);
 
+    /** Job execution context key for the day being assessed: {@code asOf}, or today. */
+    private static final String DAY = "day";
+
     @Bean
     Clock clock() {
         // the image runs in Pacific/Auckland, matching the database's CURRENT_DATE that the trigger uses
@@ -47,8 +52,18 @@ public class ComplianceJobConfig {
     }
 
     @Bean
-    Job complianceJob(JobRepository jobRepository, Step complianceStep) {
+    Job complianceJob(JobRepository jobRepository, Step complianceStep, Clock clock) {
         return new JobBuilder("complianceJob", jobRepository)
+                .listener(new JobExecutionListener() {
+                    // resolved once per run, so the reader and processor can't disagree on the day around midnight
+                    @Override
+                    public void beforeJob(JobExecution job) {
+                        String asOf = job.getJobParameters().getString("asOf");
+                        LocalDate day = asOf == null ? LocalDate.now(clock) : LocalDate.parse(asOf);
+                        job.getExecutionContext().put(DAY, day);
+                        log.info("Reassessing vehicle compliance as of {}", day);
+                    }
+                })
                 .start(complianceStep)
                 .build();
     }
@@ -85,25 +100,18 @@ public class ComplianceJobConfig {
     JdbcPagingItemReader<VehicleCompliance> staleComplianceReader(
             DataSource dataSource,
             ComplianceProperties properties,
-            @Value("#{jobParameters['asOf']}") String asOf,
-            Clock clock) throws Exception {
-        return ComplianceJdbc.staleComplianceReader(dataSource, resolve(asOf, clock), properties.chunkSize());
+            @Value("#{jobExecutionContext['" + DAY + "']}") LocalDate day) throws Exception {
+        return ComplianceJdbc.staleComplianceReader(dataSource, day, properties.chunkSize());
     }
 
     @Bean
     @StepScope
-    ComplianceProcessor complianceProcessor(@Value("#{jobParameters['asOf']}") String asOf, Clock clock) {
-        LocalDate day = resolve(asOf, clock);
-        log.info("Reassessing vehicle compliance as of {}", day);
+    ComplianceProcessor complianceProcessor(@Value("#{jobExecutionContext['" + DAY + "']}") LocalDate day) {
         return new ComplianceProcessor(day);
     }
 
     @Bean
     JdbcBatchItemWriter<ComplianceUpdate> complianceWriter(DataSource dataSource) {
         return ComplianceJdbc.complianceWriter(dataSource);
-    }
-
-    private static LocalDate resolve(String asOf, Clock clock) {
-        return asOf == null ? LocalDate.now(clock) : LocalDate.parse(asOf);
     }
 }
